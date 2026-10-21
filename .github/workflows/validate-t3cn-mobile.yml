@@ -1,0 +1,63 @@
+name: Validate T3 Code CN Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mobile/src/**
+      - apps/mobile/app.config.ts
+      - apps/mobile/eas.json
+      - tools/t3cn/**
+      - .github/workflows/validate-t3cn-mobile.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Typecheck and inspect iOS app config
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+      APP_VARIANT: production
+      T3CODE_IOS_PERSONAL_TEAM: "1"
+      T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID: com.bboytang.t3codecn
+      T3CN_IOS_BUNDLE_ID: com.bboytang.t3codecn
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check patch script syntax
+        run: |
+          node --check tools/t3cn/localize.mjs
+          node --check tools/t3cn/prepare-build.mjs
+          node --check tools/t3cn/configure-eas.mjs
+
+      - name: Install mobile dependencies
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - name: Typecheck React Native application
+        run: vp run --filter @t3tools/mobile typecheck
+
+      - name: Confirm custom app configuration
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          npx expo config --json --type public > "$RUNNER_TEMP/t3cn-expo-config.json"
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const data = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/t3cn-expo-config.json", "utf8"));
+            if (data.ios?.bundleIdentifier !== "com.bboytang.t3codecn") throw Error("Bundle ID mismatch");
+            if (data.updates?.enabled !== false) throw Error("Upstream OTA must be disabled");
+            if (data.owner === "pingdotgg" || data.extra?.eas?.projectId === "d763fcb8-d37c-41ea-a773-b54a0ab4a454") {
+              throw Error("Upstream publisher identity leaked into custom build");
+            }
+            console.log("T3 Code CN: iOS config identity/OTA checks passed.");
+          '
