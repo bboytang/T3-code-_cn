@@ -151,7 +151,7 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
         className="min-h-10 flex-1 flex-row items-center gap-2 active:opacity-70"
       >
         <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-foreground-secondary">
-          User input needed
+          需要你的回答
         </Text>
         <Text className="font-sans text-xs text-foreground-muted">
           {questionCount} question{questionCount === 1 ? "" : "s"}
@@ -208,7 +208,7 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
       >
         <View className="flex-1 gap-2.5">
           <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-foreground-secondary">
-            User input needed
+            需要你的回答
           </Text>
           <Text className="font-t3-bold text-lg text-foreground">请回答待处理的问题</Text>
         </View>

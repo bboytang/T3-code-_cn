@@ -29,8 +29,8 @@ import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
 import { useSidebarWorkspaceTabs, useSystemWorkspaceTabBar } from "./useSystemWorkspaceTabBar";
 
 const TAB_TITLES = {
-  threads: "Threads",
-  pullRequests: "Pull requests",
+  threads: "会话",
+  pullRequests: "拉取请求",
 };
 
 function WorkspaceRootTitle(props: {
