@@ -241,7 +241,7 @@ const TRANSLATABLE_FIELDS = "label|title|placeholder|accessibilityLabel|accessib
 const attr = new RegExp("(\\b(?:" + TRANSLATABLE_FIELDS + ")\\s*=\\s*)([\"'])([^\"'\\r\\n]+)\\2", "g");
 const expr = new RegExp("(\\b(?:" + TRANSLATABLE_FIELDS + ")\\s*=\\s*\\{\\s*)([\"'])([^\"'\\r\\n]+)\\2(\\s*\\})", "g");
 const obj = new RegExp("(\\b(?:" + TRANSLATABLE_FIELDS + ")\\s*:\\s*)([\"'])([^\"'\\r\\n]+)\\2", "g");
-const literalText = />([ \t]*)([A-Za-z][^<>{}\r\n]*?)([ \t]*)</g;
+const literalText = />([ \t\r\n]*)([A-Za-z][^<>{}\r\n]*?)([ \t\r\n]*)</g;
 const dialogTitle = /(\b(?:Dialog|Alert)\.alert\(\s*)(["'])([^"'\r\n]+)\2/g;
 const trans = (value) => Object.hasOwn(dictionary, value) ? dictionary[value] : value;
 
@@ -268,6 +268,11 @@ function visit(dir) {
     src = src.replace(obj, (all, prefix, quote, value) => prefix + quote + swap(value) + quote);
     src = src.replace(literalText, (all, leading, value, trailing) => ">" + leading + swap(value) + trailing + "<");
     src = src.replace(dialogTitle, (all, prefix, quote, value) => prefix + quote + swap(value) + quote);
+    // Navigation tab titles are constants rather than JSX display fields.
+    if (path.endsWith("features/workspace/WorkspaceRootScreen.tsx")) {
+      src = src.replace('  threads: "Threads",', '  threads: "会话",');
+      src = src.replace('  pullRequests: "Pull requests",', '  pullRequests: "拉取请求",');
+    }
     if (src !== original) {
       writeFileSync(path, src);
       changed++;
