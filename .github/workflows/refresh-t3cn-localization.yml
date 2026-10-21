@@ -1,0 +1,39 @@
+name: Refresh T3 Code CN Translations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/t3cn/localize.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: t3cn-localization
+  cancel-in-progress: false
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Apply mobile UI translations
+        run: node tools/t3cn/localize.mjs
+
+      - name: Commit localized UI sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/mobile/src
+          if git diff --cached --quiet; then
+            echo "No additional translations."
+            exit 0
+          fi
+          git commit -m "feat(i18n): expand Simplified Chinese mobile UI coverage"
+          git push origin HEAD:main
