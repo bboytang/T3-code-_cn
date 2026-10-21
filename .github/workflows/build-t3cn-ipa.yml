@@ -1,0 +1,131 @@
+name: Build T3 Code CN IPA (Xcode)
+
+# Build a real iOS-device .app on GitHub's hosted macOS Xcode runner.
+# Package an UNSIGNED .ipa so no Expo account or Apple credentials are needed to build.
+# This IPA must be signed before installation on a physical iPhone.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-t3cn-ipa.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-ipa:
+    name: Compile unsigned iPhone IPA
+    runs-on: xcode-27
+    timeout-minutes: 110
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+      APP_VARIANT: production
+      T3CODE_IOS_PERSONAL_TEAM: "1"
+      T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID: com.bboytang.t3codecn
+      T3CN_IOS_BUNDLE_ID: com.bboytang.t3codecn
+      T3CODE_MOBILE_UPDATES_ENABLED: "0"
+      EXPO_NO_DOTENV: "1"
+      EXPO_NO_GIT_STATUS: "1"
+      CI: "1"
+    steps:
+      - name: Checkout T3 Code Chinese source
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          pod --version
+          df -h .
+
+      - name: Install Vite+ and mobile packages
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - name: Generate iOS native project (Expo prebuild, no EAS)
+        working-directory: apps/mobile
+        run: |
+          npx expo prebuild --platform ios --clean --no-install
+          test -f ios/Podfile
+
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: pod install
+
+      - name: Discover workspace and app scheme
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' -type d | head -n 1)"
+          test -n "$workspace"
+          echo "IOS_WORKSPACE=$workspace" >> "$GITHUB_ENV"
+          xcodebuild -list -workspace "$workspace"
+          # Expo's native app scheme matches the generated project filename.
+          project="$(find ios -maxdepth 1 -name '*.xcodeproj' -type d | head -n 1)"
+          test -n "$project"
+          scheme="$(basename "$project" .xcodeproj)"
+          echo "IOS_SCHEME=$scheme" >> "$GITHUB_ENV"
+          echo "Project: $project | Scheme: $scheme"
+
+      - name: Compile Release app for physical iPhone without signing
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace "$IOS_WORKSPACE" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/t3cn-derived" \
+            -parallelizeTargets \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          products="$RUNNER_TEMP/t3cn-derived/Build/Products/Release-iphoneos"
+          app="$(find "$products" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$app" ]; then
+            echo "::error::Build produced no iOS device .app"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/t3cn-package/Payload"
+          ditto "$app" "$RUNNER_TEMP/t3cn-package/Payload/$(basename "$app")"
+          (
+            cd "$RUNNER_TEMP/t3cn-package"
+            zip -q -r -y "$GITHUB_WORKSPACE/T3-Code-CN-unsigned.ipa" Payload
+          )
+          ls -lh "$GITHUB_WORKSPACE/T3-Code-CN-unsigned.ipa"
+          {
+            echo "## T3 Code CN iPhone IPA"
+            echo
+            echo "- Built directly using GitHub-hosted Xcode 27 (no Expo EAS)."
+            echo "- Artifact: T3-Code-CN-unsigned.ipa"
+            echo "- **Unsigned**: needs iOS code signing before real-device installation."
+            echo "- Bundle ID: com.bboytang.t3codecn"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: T3-Code-CN-unsigned-IPA
+          path: T3-Code-CN-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
