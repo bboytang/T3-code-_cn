@@ -1,0 +1,77 @@
+name: Build T3 Code CN iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "simulator = unsigned simulator artifact; device = signed installable IPA"
+        required: true
+        default: simulator
+        type: choice
+        options:
+          - simulator
+          - device
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: Build Chinese iOS client
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      T3CN_EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+      T3CN_EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+      T3CN_IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID || 'com.bboytang.t3codecn' }}
+    steps:
+      - name: Check personal Expo configuration
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ] || [ -z "$T3CN_EXPO_OWNER" ] || [ -z "$T3CN_EXPO_PROJECT_ID" ]; then
+            echo "::error::Configure Actions secret EXPO_TOKEN and variables EXPO_OWNER, EXPO_PROJECT_ID (your own Expo EAS account)."
+            exit 1
+          fi
+
+      - name: Checkout Chinese mobile source
+        uses: actions/checkout@v4
+
+      - name: Configure independent Expo app
+        run: node tools/t3cn/configure-eas.mjs
+
+      - name: Set up Vite+ and mobile dependencies
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 21.8.0
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: EAS iOS build
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          if [ "${{ inputs.target }}" = "device" ]; then
+            profile=t3cn
+          else
+            profile=t3cn-simulator
+          fi
+          echo "Building profile $profile"
+          eas build --platform ios --profile "$profile" --non-interactive --wait
+          {
+            echo "## T3 Code 中文 iOS"
+            echo
+            echo "Build finished. Open your Expo EAS account's **Builds → iOS** screen to download the artifact."
+            echo
+            echo "Device builds require previously configured Apple signing credentials and registered devices. Simulator artifacts cannot be installed on a physical iPhone."
+          } >> "$GITHUB_STEP_SUMMARY"
